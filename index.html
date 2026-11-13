@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thinking Classroom</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b1d3a;color:#fff;font-family:Arial,sans-serif;overflow:hidden}
+  #stage{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2vw;box-sizing:border-box}
+  h1{font-size:6vw;margin:.2em 0}
+  p{font-size:4vw;margin:.3em 0}
+  #timer{font-size:5vw;opacity:.8}
+  img,video{max-width:95vw;max-height:80vh}
+  .sol{color:#7CFC9A}
+  #dbg{position:fixed;bottom:4px;right:8px;font-size:12px;opacity:.5}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="dbg"></div>
+<script>
+// Horas "HH:MM"
+const SCHEDULE = { welcome: "09:00", activity: "09:05", solution: "09:10", end: "09:13" };
+
+// Clave: fecha "AAAA-MM-DD" o día de la semana (1=lunes ... 5=viernes).
+// Cada actividad admite: text (HTML), image (ruta), video (ruta, en bucle).
+const CONTENT = {
+  1: { activity: { title: "Acertijo del lunes", text: "Tengo ciudades pero no casas, montañas pero no árboles, agua pero no peces. ¿Qué soy?" },
+       solution: { title: "Solución", text: "Un mapa 🗺️" } },
+  2: { activity: { title: "Lógica", text: "2, 4, 8, 16, ... ¿qué número sigue?" },
+       solution: { title: "Solución", text: "32 (se multiplica por 2)" } },
+  3: { activity: { title: "Dictado", text: "🔊 Escucha y escribe" },
+       solution: { title: "Texto del dictado", text: "Aquí va el texto correcto." } },
+  4: { activity: { title: "Sudoku", text: "Aquí iría la imagen del sudoku" },
+       solution: { title: "Solución", text: "Aquí iría la imagen con la solución" } },
+  5: { activity: { title: "Acertijo del viernes", text: "¿Qué cosa cuanto más seca más moja?" },
+       solution: { title: "Solución", text: "La toalla 🧺" } },
+};
+
+const stage = document.getElementById("stage"), dbg = document.getElementById("dbg");
+const p = new URLSearchParams(location.search);
+// ?demo => ciclo rápido de prueba (10 s por fase); ?t=09:06 => simula la hora
+function now(){
+  const d = new Date();
+  if (p.get("t")) { const [h,m]=p.get("t").split(":"); d.setHours(+h,+m,0,0); }
+  return d;
+}
+const mins = s => { const [h,m]=s.split(":"); return +h*60+ +m; };
+function render(c, cls){
+  let h = `<h1 class="${cls||""}">${c.title||""}</h1>`;
+  if (c.video) h += `<video src="${c.video}" autoplay loop playsinline></video>`;
+  if (c.image) h += `<img src="${c.image}">`;
+  if (c.text)  h += `<p>${c.text}</p>`;
+  return h;
+}
+let last = "";
+function tick(){
+  const d = now(), t = d.getHours()*60+d.getMinutes();
+  const demo = p.has("demo");
+  const pad = n => String(n).padStart(2,"0");
+  const key = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const day = CONTENT[key] || CONTENT[d.getDay()] || (demo ? CONTENT[1] : null);
+  let phase;
+  if (demo) { const s = Math.floor(Date.now()/1000)%30; phase = s<10?"welcome":s<20?"activity":"solution"; }
+  else if (!day || t<mins(SCHEDULE.welcome) || t>=mins(SCHEDULE.end)) phase="off";
+  else if (t>=mins(SCHEDULE.solution)) phase="solution";
+  else if (t>=mins(SCHEDULE.activity)) phase="activity";
+  else phase="welcome";
+
+  if (phase==="welcome" && !demo) {
+    const left = Math.max(0, mins(SCHEDULE.activity)*60 - (t*60+d.getSeconds()));
+    stage.innerHTML = `<h1>¡Buenos días! ☀️</h1><p>Prepara tu cuaderno y tu mente</p><div id="timer">Empezamos en ${Math.floor(left/60)}:${pad(left%60)}</div>`;
+    last = phase;
+  } else if (phase !== last) {
+    // Solo repintar al cambiar de fase para no reiniciar el vídeo
+    stage.innerHTML = phase==="off" ? "" :
+      phase==="welcome" ? `<h1>¡Buenos días! ☀️</h1><p>Prepara tu cuaderno y tu mente</p>` :
+      phase==="activity" ? render(day.activity) : render(day.solution,"sol");
+    last = phase;
+  }
+  dbg.textContent = phase;
+}
+tick(); setInterval(tick, 1000);
+</script>
+</body>
+</html>
