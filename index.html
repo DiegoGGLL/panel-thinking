@@ -57,6 +57,30 @@ function render(c, cls){
   if (c.text)  h += `<p>${c.text}</p>`;
   return h;
 }
+// Música ambiental generada con Web Audio (sin archivos)
+let ac, master, chordTimer, ci = 0;
+const CHORDS = [[261.63,329.63,392],[220,261.63,329.63],[174.61,261.63,349.23],[196,246.94,392]];
+function note(f){
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = "sine"; o.frequency.value = f;
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.5,t+3); g.gain.linearRampToValueAtTime(0,t+9);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t+9.5);
+}
+function startAmbient(){
+  if (ac) return;
+  try {
+    ac = new (window.AudioContext||window.webkitAudioContext)();
+    master = ac.createGain(); master.gain.value = 0.15; master.connect(ac.destination);
+    const next = () => CHORDS[ci++%CHORDS.length].forEach(note);
+    next(); chordTimer = setInterval(next, 7000);
+  } catch(e) { ac = null; }
+}
+function stopAmbient(){
+  if (!ac) return;
+  clearInterval(chordTimer);
+  const c = ac; master.gain.linearRampToValueAtTime(0, c.currentTime+2);
+  setTimeout(() => c.close(), 2500); ac = null;
+}
 let last = "";
 function tick(){
   const d = now(), t = d.getHours()*60+d.getMinutes();
@@ -71,9 +95,10 @@ function tick(){
   else if (t>=mins(SCHEDULE.activity)) phase="activity";
   else phase="welcome";
 
+  if (phase==="welcome") startAmbient(); else stopAmbient();
   if (phase==="welcome" && !demo) {
     const left = Math.max(0, mins(SCHEDULE.activity)*60 - (t*60+d.getSeconds()));
-    stage.innerHTML = `<h1>¡Buenos días! ☀️</h1><p>Prepara tu cuaderno y tu mente</p><div id="timer">Empezamos en ${Math.floor(left/60)}:${pad(left%60)}</div>`;
+    stage.innerHTML = `<h1>¡Buenos días! ☀️</h1><p>Prepara tu cuaderno y tu mente</p><div id="timer">Empezamos en ${Math.floor(left/60)}:${pad(left%60)}</div>${ac && ac.state!=="running" ? '<p style="font-size:2.5vw;opacity:.7">🔈 Toca la pantalla para activar la música</p>' : ''}`;
     last = phase;
   } else if (phase !== last) {
     // Solo repintar al cambiar de fase para no reiniciar el vídeo
@@ -86,7 +111,7 @@ function tick(){
   }
   dbg.textContent = phase;
 }
-document.addEventListener("click", () => { const a = document.getElementById("aud"); if (a && a.paused) a.play(); document.getElementById("snd")?.remove(); });
+document.addEventListener("click", () => { if (ac && ac.state==="suspended") ac.resume(); const a = document.getElementById("aud"); if (a && a.paused) a.play(); document.getElementById("snd")?.remove(); });
 tick(); setInterval(tick, 1000);
 </script>
 </body>
