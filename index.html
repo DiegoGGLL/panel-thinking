@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
@@ -6,13 +6,23 @@
 <title>Thinking Classroom</title>
 <style>
   html,body{margin:0;height:100%;background:#0b1d3a;color:#fff;font-family:Arial,sans-serif;overflow:hidden}
-  #stage{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2vw;box-sizing:border-box}
-  h1{font-size:6vw;margin:.2em 0}
-  p{font-size:4vw;margin:.3em 0}
-  #timer{font-size:5vw;opacity:.8}
+  #stage{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2vmin;box-sizing:border-box}
+  h1{font-size:6vmin;margin:.2em 0}
+  p{font-size:4vmin;margin:.3em 0}
+  #timer{font-size:8vmin;opacity:.9}
   img,video{max-width:95vw;max-height:80vh}
   .sol{color:#7CFC9A}
-  #dbg{position:fixed;bottom:4px;right:8px;font-size:12px;opacity:.5}
+  #hint{font-size:2.6vmin;opacity:.7}
+  #dbg{position:fixed;bottom:4px;right:8px;font-size:12px;opacity:.4}
+  table.sdk{border-collapse:collapse;background:#fff;color:#0b1d3a;margin:1vmin auto}
+  table.sdk td{width:8.2vmin;height:8.2vmin;border:1px solid #888;font-size:5.6vmin;font-weight:bold;text-align:center;padding:0}
+  table.sdk td.r{border-top:3px solid #000}
+  table.sdk td.c{border-left:3px solid #000}
+  table.sdk{border:3px solid #000}
+  td.hint{background:#ffe08a;color:#c0392b}
+  td.new{animation:pop 1s ease-out}
+  td.fill{color:#1a8f3c}
+  @keyframes pop{0%{transform:scale(1.8);background:#ff9800}100%{transform:scale(1)}}
 </style>
 </head>
 <body>
@@ -20,43 +30,62 @@
 <div id="dbg"></div>
 <script>
 // Horas "HH:MM"
-const SCHEDULE = { welcome: "18:58", activity: "19:00", solution: "19:05", end: "19:08" };
+const SCHEDULE = { welcome: "19:08", activity: "19:09", solution: "19:14", end: "19:17" };
 
 // Clave: fecha "AAAA-MM-DD" o día de la semana (1=lunes ... 5=viernes).
-// Cada actividad admite: text (HTML), image (ruta), video (ruta, en bucle).
+// Una actividad puede ser: text (HTML), image, video (bucle), audio (bucle),
+// sudoku {puzzle, solution, hints} y music:true (música ambiental).
 const CONTENT = {
   "2026-11-13": {
+    activity: { title: "Sudoku fácil 🧩", music: true,
+      sudoku: { puzzle: "600800501050090030823516000496050700000070309738140050381900274905000103047381960",
+                solution: "679834521154792836823516497496253718512678349738149652381965274965427183247381965",
+                hints: [9, 26, 50, 80] } },
+    solution: { title: "Solución ✅", sudokuSolution: true } },
+  "ejemplo-dictado": {
     activity: { title: "Dictado 🎧", text: "Escucha y escribe en tu cuaderno", audio: "dictado.wav" },
     solution: { title: "Corrige tu dictado ✍️", text: "1. El otoño llegó al pueblo con un viento suave, y las hojas amarillas cubrieron el camino.<br>2. Los niños corrieron al patio, porque querían saltar entre las hojas.<br>3. Una ardilla escondió bellotas en el hueco de un árbol.<br>4. Al caer la tarde, el cielo se volvió naranja y rosado." } },
-  1: { activity: { title: "Acertijo del lunes", text: "Tengo ciudades pero no casas, montañas pero no árboles, agua pero no peces. ¿Qué soy?" },
-       solution: { title: "Solución", text: "Un mapa 🗺️" } },
-  2: { activity: { title: "Lógica", text: "2, 4, 8, 16, ... ¿qué número sigue?" },
-       solution: { title: "Solución", text: "32 (se multiplica por 2)" } },
-  3: { activity: { title: "Dictado", text: "🔊 Escucha y escribe" },
-       solution: { title: "Texto del dictado", text: "Aquí va el texto correcto." } },
-  4: { activity: { title: "Sudoku", text: "Aquí iría la imagen del sudoku" },
-       solution: { title: "Solución", text: "Aquí iría la imagen con la solución" } },
-  5: { activity: { title: "Acertijo del viernes", text: "¿Qué cosa cuanto más seca más moja?" },
-       solution: { title: "Solución", text: "La toalla 🧺" } },
 };
 
 const stage = document.getElementById("stage"), dbg = document.getElementById("dbg");
 const p = new URLSearchParams(location.search);
-// ?demo => ciclo rápido de prueba (10 s por fase); ?t=09:06 => simula la hora
+// ?demo => ciclo rápido (10 s por fase); ?t=09:06 => simula la hora; ?dia=ejemplo-dictado => fuerza actividad
 function now(){
   const d = new Date();
   if (p.get("t")) { const [h,m]=p.get("t").split(":"); d.setHours(+h,+m,0,0); }
   return d;
 }
 const mins = s => { const [h,m]=s.split(":"); return +h*60+ +m; };
-function render(c, cls){
+const pad = n => String(n).padStart(2,"0");
+
+function grid(sd, hintsShown, solved){
+  let h = '<table class="sdk">';
+  for (let r=0;r<9;r++){
+    h += "<tr>";
+    for (let c=0;c<9;c++){
+      const i=r*9+c, g=sd.puzzle[i];
+      const hi = sd.hints.indexOf(i);
+      let cls = (r%3===0&&r>0?"r ":"")+(c%3===0&&c>0?"c ":""), v="";
+      if (g!=="0") v=g;
+      else if (hi>=0 && hi<hintsShown) { v=sd.solution[i]; cls+="hint "+(hi===hintsShown-1&&!solved?"new":""); }
+      else if (solved) { v=sd.solution[i]; cls+="fill"; }
+      h += `<td class="${cls}">${v}</td>`;
+    }
+    h += "</tr>";
+  }
+  return h+"</table>";
+}
+function render(c, cls, hintsShown){
   let h = `<h1 class="${cls||""}">${c.title||""}</h1>`;
-  if (c.audio) h += `<audio id="aud" src="${c.audio}" autoplay loop></audio><p id="snd" style="display:none;font-size:3vw">🔈 Toca la pantalla para activar el sonido</p>`;
+  if (c.audio) h += `<audio id="aud" src="${c.audio}" autoplay loop></audio><p id="snd" style="display:none;font-size:3vmin">🔈 Toca la pantalla para activar el sonido</p>`;
   if (c.video) h += `<video src="${c.video}" autoplay loop playsinline></video>`;
   if (c.image) h += `<img src="${c.image}">`;
+  if (c.sudoku) h += grid(c.sudoku, hintsShown, false);
+  if (c.sudokuSolution) h += grid(c.sudokuSolutionData, 4, true);
   if (c.text)  h += `<p>${c.text}</p>`;
   return h;
 }
+
 // Música ambiental generada con Web Audio (sin archivos)
 let ac, master, chordTimer, ci = 0;
 const CHORDS = [[261.63,329.63,392],[220,261.63,329.63],[174.61,261.63,349.23],[196,246.94,392]];
@@ -67,12 +96,13 @@ function note(f){
   o.connect(g); g.connect(master); o.start(t); o.stop(t+9.5);
 }
 function startAmbient(){
-  if (ac) return;
+  if (ac) { if (ac.state==="suspended") ac.resume().catch(()=>{}); return; }
   try {
     ac = new (window.AudioContext||window.webkitAudioContext)();
     master = ac.createGain(); master.gain.value = 0.15; master.connect(ac.destination);
     const next = () => CHORDS[ci++%CHORDS.length].forEach(note);
     next(); chordTimer = setInterval(next, 7000);
+    ac.resume().catch(()=>{});
   } catch(e) { ac = null; }
 }
 function stopAmbient(){
@@ -81,39 +111,53 @@ function stopAmbient(){
   const c = ac; master.gain.linearRampToValueAtTime(0, c.currentTime+2);
   setTimeout(() => c.close(), 2500); ac = null;
 }
+function unlock(){
+  if (ac && ac.state==="suspended") ac.resume();
+  const a = document.getElementById("aud"); if (a && a.paused) a.play();
+  const s = document.getElementById("snd"); if (s) s.remove();
+}
+["click","touchstart","keydown","pointerdown"].forEach(e => document.addEventListener(e, unlock));
+
 let last = "";
 function tick(){
-  const d = now(), t = d.getHours()*60+d.getMinutes();
+  const d = now(), t = d.getHours()*60+d.getMinutes(), sec = t*60+d.getSeconds();
   const demo = p.has("demo");
-  const pad = n => String(n).padStart(2,"0");
   const key = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  const day = CONTENT[key] || CONTENT[d.getDay()] || (demo ? CONTENT[1] : null);
-  let phase;
-  if (demo) { const s = Math.floor(Date.now()/1000)%30; phase = s<10?"welcome":s<20?"activity":"solution"; }
-  else if (!day || t<mins(SCHEDULE.welcome) || t>=mins(SCHEDULE.end)) phase="off";
-  else if (t>=mins(SCHEDULE.solution)) phase="solution";
-  else if (t>=mins(SCHEDULE.activity)) phase="activity";
-  else phase="welcome";
+  const day = CONTENT[p.get("dia")] || CONTENT[key] || CONTENT[d.getDay()] || (demo ? CONTENT["2026-11-13"] : null);
+  if (day && day.solution.sudokuSolution && day.activity.sudoku) day.solution.sudokuSolutionData = day.activity.sudoku;
 
-  if (phase==="welcome") startAmbient(); else stopAmbient();
-  if (phase==="welcome" && !demo) {
-    const left = Math.max(0, mins(SCHEDULE.activity)*60 - (t*60+d.getSeconds()));
-    stage.innerHTML = `<h1>¡Buenos días! ☀️</h1><p>Prepara tu cuaderno y tu mente</p><div id="timer">Empezamos en ${Math.floor(left/60)}:${pad(left%60)}</div>${ac && ac.state!=="running" ? '<p style="font-size:2.5vw;opacity:.7">🔈 Toca la pantalla para activar la música</p>' : ''}`;
-    last = phase;
-  } else if (phase !== last) {
-    // Solo repintar al cambiar de fase para no reiniciar el vídeo
-    stage.innerHTML = phase==="off" ? "" :
-      phase==="welcome" ? `<h1>¡Buenos días! ☀️</h1><p>Prepara tu cuaderno y tu mente</p>` :
-      phase==="activity" ? render(day.activity) : render(day.solution,"sol");
-    last = phase;
-          const a = document.getElementById("aud");
-          if (a) a.play().catch(() => { const s = document.getElementById("snd"); if (s) s.style.display = "block"; });
+  let phase, elapsed = 0, left = 0;
+  if (demo) {
+    const s = Math.floor(Date.now()/1000)%30;
+    phase = s<10?"welcome":s<20?"activity":"solution";
+    elapsed = (s-10)*24; left = 10-s;
+  } else if (!day || t<mins(SCHEDULE.welcome) || t>=mins(SCHEDULE.end)) phase="off";
+  else if (t>=mins(SCHEDULE.solution)) phase="solution";
+  else if (t>=mins(SCHEDULE.activity)) { phase="activity"; elapsed = sec - mins(SCHEDULE.activity)*60; }
+  else { phase="welcome"; left = mins(SCHEDULE.activity)*60 - sec; }
+
+  const music = phase==="welcome" || (phase==="activity" && day.activity.music);
+  if (music) startAmbient(); else stopAmbient();
+  const needTap = ac && ac.state!=="running";
+
+  if (phase==="welcome") {
+    stage.innerHTML = `<h1>¡Buenos días! ☀️</h1><p>Prepara tu cuaderno y tu mente</p><div id="timer">Empezamos en ${Math.floor(left/60)}:${pad(left%60)}</div>${needTap?'<p id="hint">🔈 Toca la pantalla para activar la música</p>':''}`;
+    last = "welcome";
+  } else {
+    const shown = phase==="activity" ? Math.min(4, Math.floor(elapsed/60)) : 0;
+    const k = phase+shown;
+    if (k !== last) {
+      // Repintar solo cuando cambia algo, para no reiniciar audio/vídeo
+      stage.innerHTML = phase==="off" ? "" :
+        phase==="activity" ? render(day.activity,"",shown) : render(day.solution,"sol");
+      last = k;
+      const a = document.getElementById("aud");
+      if (a) a.play().catch(() => { const s = document.getElementById("snd"); if (s) s.style.display = "block"; });
+    }
   }
   dbg.textContent = phase;
 }
-document.addEventListener("click", () => { if (ac && ac.state==="suspended") ac.resume(); const a = document.getElementById("aud"); if (a && a.paused) a.play(); document.getElementById("snd")?.remove(); });
 tick(); setInterval(tick, 1000);
 </script>
 </body>
 </html>
-
