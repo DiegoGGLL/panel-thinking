@@ -81,6 +81,8 @@ function tick(){
       phase==="welcome" ? `<h1>¡Buenos días! ☀️</h1><p>Prepara tu cuaderno y tu mente</p>` :
       phase==="activity" ? render(day.activity) : render(day.solution,"sol");
     last = phase;
+          const a = document.getElementById("aud");
+          if (a) a.play().catch(() => { const s = document.getElementById("snd"); if (s) s.style.display = "block"; });
   }
   dbg.textContent = phase;
 }
