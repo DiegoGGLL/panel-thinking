@@ -8,17 +8,17 @@
   html,body{margin:0;height:100%;background:#0b1d3a;color:#fff;font-family:Arial,sans-serif;overflow:hidden}
   #stage{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2vmin;box-sizing:border-box}
   h1{font-size:6vmin;margin:.2em 0}
-  p{font-size:4vmin;margin:.3em 0}
+  p{font-size:4vmin;margin:.3em 0;max-width:90vw}
   #timer{font-size:8vmin;opacity:.9}
   img,video{max-width:95vw;max-height:80vh}
   .sol{color:#7CFC9A}
+  .big{font-size:4.6vmin;line-height:1.5}
   #hint{font-size:2.6vmin;opacity:.7}
   #dbg{position:fixed;bottom:4px;right:8px;font-size:12px;opacity:.4}
-  table.sdk{border-collapse:collapse;background:#fff;color:#0b1d3a;margin:1vmin auto}
+  table.sdk{border-collapse:collapse;background:#fff;color:#0b1d3a;margin:1vmin auto;border:3px solid #000}
   table.sdk td{width:8.2vmin;height:8.2vmin;border:1px solid #888;font-size:5.6vmin;font-weight:bold;text-align:center;padding:0}
   table.sdk td.r{border-top:3px solid #000}
   table.sdk td.c{border-left:3px solid #000}
-  table.sdk{border:3px solid #000}
   td.hint{background:#ffe08a;color:#c0392b}
   td.new{animation:pop 1s ease-out}
   td.fill{color:#1a8f3c}
@@ -29,27 +29,33 @@
 <div id="stage"></div>
 <div id="dbg"></div>
 <script>
-// Horas "HH:MM"
-const SCHEDULE = { welcome: "19:08", activity: "19:09", solution: "19:14", end: "19:17" };
+// Horas "HH:MM" (PRUEBA: 1 minuto por fase)
+const SCHEDULE = { welcome: "20:04", activity: "20:05", solution: "20:06", end: "20:07" };
 
-// Clave: fecha "AAAA-MM-DD" o día de la semana (1=lunes ... 5=viernes).
-// Una actividad puede ser: text (HTML), image, video (bucle), audio (bucle),
-// sudoku {puzzle, solution, hints} y music:true (música ambiental).
+// Clave: fecha "AAAA-MM-DD", nombre propio (?dia=nombre) o día de la semana (1=lunes ... 5=viernes).
+// Una actividad puede tener: text (HTML), image, video (bucle), audio (bucle),
+// sudoku {puzzle, solution, hints}, y music: "calma" | "pensar" | "alegre".
 const CONTENT = {
   "2026-11-13": {
-    activity: { title: "Sudoku fácil 🧩", music: true,
+    activity: { title: "Acertijo del dinero 💶", music: "pensar",
+      text: "Juan tiene 2 €.<br>Rosa tiene 4 € más que Juan.<br>Pepe tiene 2 € más que Rosa.<br>Marta tiene 6 € más que Pepe.<br><b>¿Cuánto dinero tiene cada uno?</b>" },
+    solution: { title: "Solución ✅", music: "alegre",
+      text: "Juan: 2 €<br>Rosa: 2 + 4 = 6 €<br>Pepe: 6 + 2 = 8 €<br>Marta: 8 + 6 = 14 €<br><b>Entre los cuatro: 30 €</b>" } },
+  "sudoku-ejemplo": {
+    activity: { title: "Sudoku fácil 🧩", music: "pensar",
       sudoku: { puzzle: "600800501050090030823516000496050700000070309738140050381900274905000103047381960",
                 solution: "679834521154792836823516497496253718512678349738149652381965274965427183247381965",
                 hints: [9, 26, 50, 80] } },
-    solution: { title: "Solución ✅", sudokuSolution: true } },
+    solution: { title: "Solución ✅", music: "alegre", sudokuSolution: true } },
   "ejemplo-dictado": {
     activity: { title: "Dictado 🎧", text: "Escucha y escribe en tu cuaderno", audio: "dictado.wav" },
     solution: { title: "Corrige tu dictado ✍️", text: "1. El otoño llegó al pueblo con un viento suave, y las hojas amarillas cubrieron el camino.<br>2. Los niños corrieron al patio, porque querían saltar entre las hojas.<br>3. Una ardilla escondió bellotas en el hueco de un árbol.<br>4. Al caer la tarde, el cielo se volvió naranja y rosado." } },
 };
+const WELCOME_MUSIC = "calma";
 
 const stage = document.getElementById("stage"), dbg = document.getElementById("dbg");
 const p = new URLSearchParams(location.search);
-// ?demo => ciclo rápido (10 s por fase); ?t=09:06 => simula la hora; ?dia=ejemplo-dictado => fuerza actividad
+// ?demo => ciclo rápido; ?t=09:06 => simula la hora; ?dia=sudoku-ejemplo => fuerza una actividad
 function now(){
   const d = new Date();
   if (p.get("t")) { const [h,m]=p.get("t").split(":"); d.setHours(+h,+m,0,0); }
@@ -63,8 +69,7 @@ function grid(sd, hintsShown, solved){
   for (let r=0;r<9;r++){
     h += "<tr>";
     for (let c=0;c<9;c++){
-      const i=r*9+c, g=sd.puzzle[i];
-      const hi = sd.hints.indexOf(i);
+      const i=r*9+c, g=sd.puzzle[i], hi = sd.hints.indexOf(i);
       let cls = (r%3===0&&r>0?"r ":"")+(c%3===0&&c>0?"c ":""), v="";
       if (g!=="0") v=g;
       else if (hi>=0 && hi<hintsShown) { v=sd.solution[i]; cls+="hint "+(hi===hintsShown-1&&!solved?"new":""); }
@@ -75,41 +80,47 @@ function grid(sd, hintsShown, solved){
   }
   return h+"</table>";
 }
-function render(c, cls, hintsShown){
+function render(c, cls, hintsShown, sdk){
   let h = `<h1 class="${cls||""}">${c.title||""}</h1>`;
   if (c.audio) h += `<audio id="aud" src="${c.audio}" autoplay loop></audio><p id="snd" style="display:none;font-size:3vmin">🔈 Toca la pantalla para activar el sonido</p>`;
   if (c.video) h += `<video src="${c.video}" autoplay loop playsinline></video>`;
   if (c.image) h += `<img src="${c.image}">`;
   if (c.sudoku) h += grid(c.sudoku, hintsShown, false);
-  if (c.sudokuSolution) h += grid(c.sudokuSolutionData, 4, true);
-  if (c.text)  h += `<p>${c.text}</p>`;
+  if (c.sudokuSolution && sdk) h += grid(sdk, 4, true);
+  if (c.text)  h += `<p class="big">${c.text}</p>`;
   return h;
 }
 
-// Música ambiental generada con Web Audio (sin archivos)
-let ac, master, chordTimer, ci = 0;
-const CHORDS = [[261.63,329.63,392],[220,261.63,329.63],[174.61,261.63,349.23],[196,246.94,392]];
-function note(f){
-  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
-  o.type = "sine"; o.frequency.value = f;
-  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.5,t+3); g.gain.linearRampToValueAtTime(0,t+9);
-  o.connect(g); g.connect(master); o.start(t); o.stop(t+9.5);
+// Músicas ambientales generadas con Web Audio (sin archivos)
+const TRACKS = {
+  calma:  { type:"sine",     interval:7000, dur:9,   stagger:0,    vol:.5,
+            chords:[[261.63,329.63,392],[220,261.63,329.63],[174.61,261.63,349.23],[196,246.94,392]] },
+  pensar: { type:"triangle", interval:4800, dur:3.6, stagger:0.6,  vol:.4,
+            chords:[[220,261.63,329.63],[174.61,220,261.63],[196,246.94,293.66],[164.81,207.65,246.94]] },
+  alegre: { type:"triangle", interval:2800, dur:2.2, stagger:0.22, vol:.45,
+            chords:[[392,523.25,659.25],[349.23,440,523.25],[293.66,392,493.88],[392,523.25,784]] }
+};
+let ac, curName = null, curGain, timer, ci = 0;
+function note(f, tr, delay, out){
+  const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+  o.type = tr.type; o.frequency.value = f;
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(tr.vol,t+Math.min(1.5,tr.dur/3)); g.gain.linearRampToValueAtTime(0,t+tr.dur);
+  o.connect(g); g.connect(out); o.start(t); o.stop(t+tr.dur+.2);
 }
-function startAmbient(){
-  if (ac) { if (ac.state==="suspended") ac.resume().catch(()=>{}); return; }
+function setMusic(name){
+  if (name === curName) { if (ac && ac.state==="suspended") ac.resume().catch(()=>{}); return; }
+  clearInterval(timer);
+  if (ac && curGain) curGain.gain.linearRampToValueAtTime(0, ac.currentTime+1.5);
+  curName = name;
+  if (!name) return;
   try {
-    ac = new (window.AudioContext||window.webkitAudioContext)();
-    master = ac.createGain(); master.gain.value = 0.15; master.connect(ac.destination);
-    const next = () => CHORDS[ci++%CHORDS.length].forEach(note);
-    next(); chordTimer = setInterval(next, 7000);
+    if (!ac) ac = new (window.AudioContext||window.webkitAudioContext)();
+    const tr = TRACKS[name], out = ac.createGain();
+    out.gain.value = 0.15; out.connect(ac.destination); curGain = out;
+    const play = () => tr.chords[ci++%tr.chords.length].forEach((f,i) => note(f, tr, i*tr.stagger, out));
+    play(); timer = setInterval(play, tr.interval);
     ac.resume().catch(()=>{});
-  } catch(e) { ac = null; }
-}
-function stopAmbient(){
-  if (!ac) return;
-  clearInterval(chordTimer);
-  const c = ac; master.gain.linearRampToValueAtTime(0, c.currentTime+2);
-  setTimeout(() => c.close(), 2500); ac = null;
+  } catch(e) { ac = null; curName = null; }
 }
 function unlock(){
   if (ac && ac.state==="suspended") ac.resume();
@@ -124,7 +135,7 @@ function tick(){
   const demo = p.has("demo");
   const key = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
   const day = CONTENT[p.get("dia")] || CONTENT[key] || CONTENT[d.getDay()] || (demo ? CONTENT["2026-11-13"] : null);
-  if (day && day.solution.sudokuSolution && day.activity.sudoku) day.solution.sudokuSolutionData = day.activity.sudoku;
+  const sdk = day && day.activity.sudoku;
 
   let phase, elapsed = 0, left = 0;
   if (demo) {
@@ -136,8 +147,7 @@ function tick(){
   else if (t>=mins(SCHEDULE.activity)) { phase="activity"; elapsed = sec - mins(SCHEDULE.activity)*60; }
   else { phase="welcome"; left = mins(SCHEDULE.activity)*60 - sec; }
 
-  const music = phase==="welcome" || (phase==="activity" && day.activity.music);
-  if (music) startAmbient(); else stopAmbient();
+  setMusic(phase==="welcome" ? WELCOME_MUSIC : phase==="off" ? null : (day[phase].music || null));
   const needTap = ac && ac.state!=="running";
 
   if (phase==="welcome") {
@@ -149,7 +159,7 @@ function tick(){
     if (k !== last) {
       // Repintar solo cuando cambia algo, para no reiniciar audio/vídeo
       stage.innerHTML = phase==="off" ? "" :
-        phase==="activity" ? render(day.activity,"",shown) : render(day.solution,"sol");
+        phase==="activity" ? render(day.activity,"",shown) : render(day.solution,"sol",0,sdk);
       last = k;
       const a = document.getElementById("aud");
       if (a) a.play().catch(() => { const s = document.getElementById("snd"); if (s) s.style.display = "block"; });
